@@ -1,1 +1,68 @@
 
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>জননী কম্পিউটার — Admin</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6fb;color:#172033;font-family:Arial,"Noto Sans Bengali",sans-serif}header{background:#173b73;color:white;padding:18px}main{max-width:950px;margin:18px auto;padding:0 12px}.card{background:white;border:1px solid #dce4ef;border-radius:12px;padding:16px;margin-bottom:14px}h1{font-size:21px;margin:0 0 6px}h2{font-size:18px;margin:0 0 12px}.muted{color:#64748b;font-size:13px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}label{display:block;font-weight:bold;font-size:14px;margin-bottom:5px}input,textarea,select{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:7px;font:inherit}textarea{min-height:65px}button{border:0;border-radius:7px;padding:10px 13px;background:#1d4ed8;color:#fff;font-weight:bold;margin:5px 4px 0 0}button.gray{background:#e2e8f0;color:#172033}button.red{background:#b91c1c}.hidden{display:none}.msg{padding:10px;background:#eff6ff;border-radius:7px;margin-top:10px;white-space:pre-wrap}.err{background:#fee2e2;color:#991b1b}.good{background:#dcfce7;color:#166534}.item{border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-top:9px}.item img{width:55px;height:55px;object-fit:cover;float:right}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header><h1>জননী কম্পিউটার এন্ড স্টেশনারি</h1><div>অ্যাডমিন প্যানেল — পণ্য ও অর্ডার</div></header>
+<main>
+<section id="login" class="card"><h2>অ্যাডমিন লগইন</h2><p class="muted">Supabase-এ তৈরি করা অ্যাডমিন ইমেইল ও পাসওয়ার্ড দিন।</p>
+<div class="grid"><div><label for="email">ইমেইল</label><input id="email" type="email" autocomplete="username"></div><div><label for="password">পাসওয়ার্ড</label><input id="password" type="password" autocomplete="current-password"></div></div>
+<button id="loginBtn">লগইন</button><div id="loginMsg" class="msg hidden"></div></section>
+<section id="dashboard" class="hidden">
+<div class="card row"><div><h2>ড্যাশবোর্ড</h2><div id="signedIn" class="muted"></div></div><button id="logout" class="gray">লগআউট</button></div>
+<section class="card"><h2 id="formTitle">নতুন পণ্য যোগ করুন</h2><form id="productForm"><input id="pid" type="hidden">
+<div class="grid">
+<div><label for="bn">পণ্যের নাম (বাংলা) *</label><input id="bn" required maxlength="180"></div>
+<div><label for="en">পণ্যের নাম (English)</label><input id="en" maxlength="180"></div>
+<div><label for="price">দাম (টাকা) *</label><input id="price" type="number" min="0" step=".01" value="0" required></div>
+<div><label for="stock">স্টক *</label><input id="stock" type="number" min="0" step="1" value="0" required></div>
+<div><label for="category">ক্যাটাগরি</label><input id="category"></div>
+<div><label for="image">ছবির URL</label><input id="image" type="url" placeholder="https://..."></div>
+</div><p><label for="desc">বিবরণ</label><textarea id="desc"></textarea></p>
+<label><input id="active" type="checkbox" checked style="width:auto"> ওয়েবসাইটে দেখান</label><button id="saveBtn">পণ্য সংরক্ষণ</button><button type="button" id="clearBtn" class="gray">ফর্ম খালি করুন</button><div id="productMsg" class="msg hidden"></div></form></section>
+<section class="card"><div class="row"><h2>পণ্যের তালিকা</h2><button id="reloadProducts" class="gray">রিফ্রেশ</button></div><div id="products">লোড হচ্ছে...</div></section>
+<section class="card"><div class="row"><h2>অর্ডার</h2><button id="reloadOrders" class="gray">রিফ্রেশ</button></div><div id="orders">লোড হচ্ছে...</div></section>
+</section>
+<section class="card"><h2>নোট</h2><p class="muted">পণ্যের ছবি যোগ করতে ছবির সরাসরি URL দিন। ফাইল আপলোডের জন্য Supabase Storage আলাদাভাবে সেট করতে হবে। গ্রাহকের ওয়েবসাইট থেকে অর্ডার জমা দেওয়ার অনুমতি এই প্যানেল একা চালু করে না।</p></section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(()=> {
+const URL='https://tsqtvfihdljkikqpzooq.supabase.co';
+const KEY='sb_publishable_6kPIXn7FmL4BYLQDdbutDQ_nLf4rRuu';
+const db=window.supabase.createClient(URL,KEY), $=id=>document.getElementById(id);
+let productRows=[];
+function msg(id,text,kind=''){const e=$(id);e.textContent=text;e.className='msg '+kind}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function cash(n){return '৳'+Number(n||0).toLocaleString('en-BD')}
+function clearForm(){$('productForm').reset();$('pid').value='';$('price').value=0;$('stock').value=0;$('active').checked=true;$('formTitle').textContent='নতুন পণ্য যোগ করুন';$('saveBtn').textContent='পণ্য সংরক্ষণ';$('productMsg').classList.add('hidden')}
+async function checkAdmin(){
+ const {data:{user}}=await db.auth.getUser();
+ if(!user){$('login').classList.remove('hidden');$('dashboard').classList.add('hidden');return}
+ const {data,error}=await db.from('admin_users').select('user_id').eq('user_id',user.id).maybeSingle();
+ if(error||!data){await db.auth.signOut();msg('loginMsg','এই অ্যাকাউন্টে অ্যাডমিন অনুমতি নেই। admin_users টেবিলে সঠিক user ID আছে কি না দেখুন।','err');$('login').classList.remove('hidden');return}
+ $('login').classList.add('hidden');$('dashboard').classList.remove('hidden');$('signedIn').textContent='লগইন: '+user.email;await Promise.all([loadProducts(),loadOrders()])
+}
+async function loadProducts(){
+ const {data,error}=await db.from('products').select('*').order('created_at',{ascending:false});
+ if(error){$('products').textContent='পণ্য লোড হয়নি: '+error.message;return}
+ productRows=data||[];
+ $('products').innerHTML=productRows.length?productRows.map(p=>`<div class="item"><div class="row"><strong>${esc(p.name_bn)}</strong><span>${p.is_active?'দৃশ্যমান':'লুকানো'}</span></div>${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:''}<p>${esc(p.name_en||'')} · ${cash(p.price)} · স্টক: ${Number(p.stock||0)}</p><p class="muted">${esc(p.category||'')} ${esc(p.description||'')}</p><button class="gray edit" data-id="${p.id}">সম্পাদনা</button><button class="red del" data-id="${p.id}">মুছুন</button></div>`).join(''):'কোনো পণ্য নেই।';
+ document.querySelectorAll('.edit').forEach(b=>b.onclick=()=>edit(b.dataset.id));document.querySelectorAll('.del').forEach(b=>b.onclick=()=>removeProduct(b.dataset.id))
+}
+function edit(id){const p=productRows.find(x=>String(x.id)===String(id));if(!p)return;$('pid').value=p.id;$('bn').value=p.name_bn||'';$('en').value=p.name_en||'';$('price').value=p.price||0;$('stock').value=p.stock||0;$('category').value=p.category||'';$('image').value=p.image_url||'';$('desc').value=p.description||'';$('active').checked=!!p.is_active;$('formTitle').textContent='পণ্য সম্পাদনা করুন';$('saveBtn').textContent='পরিবর্তন সংরক্ষণ';window.scrollTo({top:0,behavior:'smooth'})}
+async function removeProduct(id){const p=productRows.find(x=>String(x.id)===String(id));if(!p||!confirm(p.name_bn+' মুছে ফেলবেন?'))return;const {error}=await db.from('products').delete().eq('id',id);if(error)alert('মুছতে সমস্যা: '+error.message);else await loadProducts()}
+$('productForm').onsubmit=async e=>{e.preventDefault();const id=$('pid').value;const p={name_bn:$('bn').value.trim(),name_en:$('en').value.trim()||null,price:Number($('price').value),stock:Number($('stock').value),category:$('category').value.trim()||null,image_url:$('image').value.trim()||null,description:$('desc').value.trim()||null,is_active:$('active').checked};const r=id?await db.from('products').update(p).eq('id',id):await db.from('products').insert(p);if(r.error){msg('productMsg','সংরক্ষণ হয়নি: '+r.error.message,'err');return}msg('productMsg','পণ্য সংরক্ষণ হয়েছে।','good');clearForm();await loadProducts()};
+async function loadOrders(){const {data,error}=await db.from('orders').select('*').order('created_at',{ascending:false});if(error){$('orders').textContent='অর্ডার লোড হয়নি: '+error.message;return}const rows=data||[];$('orders').innerHTML=rows.length?rows.map(o=>`<div class="item"><strong>অর্ডার #${o.id} — ${cash(o.total_amount)}</strong><p>${esc(o.customer_name)} | ${esc(o.phone)}</p><p>${esc(o.address)}</p><p class="muted">পণ্য: ${esc(JSON.stringify(o.items||[]))}</p><label for="status${o.id}">স্ট্যাটাস</label><select id="status${o.id}">${['pending','confirmed','processing','completed','cancelled'].map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}</select><button class="status" data-id="${o.id}">স্ট্যাটাস সংরক্ষণ</button></div>`).join(''):'এখনো কোনো অর্ডার নেই।';document.querySelectorAll('.status').forEach(b=>b.onclick=async()=>{const status=$('status'+b.dataset.id).value;const {error}=await db.from('orders').update({status}).eq('id',b.dataset.id);if(error)alert('স্ট্যাটাস বদল হয়নি: '+error.message);else{alert('সংরক্ষণ হয়েছে');await loadOrders()}})}
+$('loginBtn').onclick=async()=>{const email=$('email').value.trim(),password=$('password').value;if(!email||!password){msg('loginMsg','ইমেইল ও পাসওয়ার্ড দিন।','err');return}const {error}=await db.auth.signInWithPassword({email,password});if(error){msg('loginMsg','লগইন হয়নি: '+error.message,'err');return}await checkAdmin()};
+$('logout').onclick=async()=>{await db.auth.signOut();location.reload()};$('clearBtn').onclick=clearForm;$('reloadProducts').onclick=loadProducts;$('reloadOrders').onclick=loadOrders;
+checkAdmin().catch(e=>msg('loginMsg','সমস্যা: '+e.message,'err'));
+})();
+</script>
+</body></html>
